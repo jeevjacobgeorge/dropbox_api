@@ -280,8 +280,323 @@ To configure the Dropbox API and the Django application, ensure the following en
 
 ---
 
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+Certainly! Here's a `README.md` file for React developers, explaining how to integrate the frontend with the Django API, including the creation of forms and how to interact with the API.
 
 ---
+
+# React Frontend Integration with Image Upload API
+
+This document guides React developers on how to create forms and interact with the Django API for image upload and retrieval of image URLs associated with a phone number. You will learn how to send requests to the API, handle file uploads, and display images dynamically on the frontend.
+
+---
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Setting up React Project](#setting-up-react-project)
+3. [Creating the Upload Form](#creating-the-upload-form)
+4. [Uploading Images](#uploading-images)
+5. [Fetching Image URLs](#fetching-image-urls)
+6. [Handling API Responses](#handling-api-responses)
+7. [Error Handling](#error-handling)
+8. [Styling the UI](#styling-the-ui)
+
+---
+
+## Prerequisites
+
+Before proceeding, ensure you have the following:
+
+- **Node.js** (>= 14.x)
+- **npm** or **yarn** for package management
+- A running Django API (as per the instructions in the [Backend README](#backend-readme))
+
+Ensure that your React application can communicate with the Django API. You may want to set the API URL in a `.env` file to avoid hardcoding URLs.
+
+---
+
+## Setting up React Project
+
+1. **Create a new React app** (if not already created):
+
+   ```bash
+   npx create-react-app image-upload
+   cd image-upload
+   ```
+
+2. **Install Axios** to make HTTP requests:
+
+   ```bash
+   npm install axios
+   ```
+
+3. **Create a `.env` file** for the API base URL:
+
+   ```plaintext
+   REACT_APP_API_URL=http://localhost:8000/api
+   ```
+
+---
+
+## Creating the Upload Form
+
+In the React app, create a form to upload images and provide a field for entering the `phone_number`. The form will send the selected images to the Django API.
+
+1. **Create `UploadForm.js`** in `src/components/`:
+
+   ```jsx
+   import React, { useState } from 'react';
+   import axios from 'axios';
+
+   const UploadForm = () => {
+     const [phoneNumber, setPhoneNumber] = useState('');
+     const [images, setImages] = useState([]);
+     const [isUploading, setIsUploading] = useState(false);
+     const [uploadResults, setUploadResults] = useState([]);
+
+     const handlePhoneNumberChange = (e) => {
+       setPhoneNumber(e.target.value);
+     };
+
+     const handleImageChange = (e) => {
+       setImages(e.target.files);
+     };
+
+     const handleSubmit = async (e) => {
+       e.preventDefault();
+       setIsUploading(true);
+
+       const formData = new FormData();
+       formData.append('phone_number', phoneNumber);
+       Array.from(images).forEach((image) => {
+         formData.append('images', image);
+       });
+
+       try {
+         const response = await axios.post(`${process.env.REACT_APP_API_URL}/upload/`, formData, {
+           headers: {
+             'Content-Type': 'multipart/form-data',
+           },
+         });
+
+         setUploadResults(response.data.results);
+       } catch (error) {
+         console.error('Error uploading images:', error);
+       } finally {
+         setIsUploading(false);
+       }
+     };
+
+     return (
+       <div>
+         <h2>Upload Images</h2>
+         <form onSubmit={handleSubmit}>
+           <div>
+             <label>Phone Number:</label>
+             <input
+               type="text"
+               value={phoneNumber}
+               onChange={handlePhoneNumberChange}
+               required
+             />
+           </div>
+           <div>
+             <label>Upload Images:</label>
+             <input
+               type="file"
+               multiple
+               onChange={handleImageChange}
+               required
+             />
+           </div>
+           <button type="submit" disabled={isUploading}>
+             {isUploading ? 'Uploading...' : 'Upload'}
+           </button>
+         </form>
+
+         {uploadResults.length > 0 && (
+           <div>
+             <h3>Upload Results:</h3>
+             <ul>
+               {uploadResults.map((result, index) => (
+                 <li key={index}>
+                   <strong>{result.filename}</strong>: {result.message}
+                   <br />
+                   {result.image_url && (
+                     <a href={result.image_url} target="_blank" rel="noopener noreferrer">
+                       View Image
+                     </a>
+                   )}
+                 </li>
+               ))}
+             </ul>
+           </div>
+         )}
+       </div>
+     );
+   };
+
+   export default UploadForm;
+   ```
+
+   ### Explanation:
+   - `phoneNumber`: Holds the phone number entered by the user.
+   - `images`: Holds the selected image files.
+   - `handlePhoneNumberChange`: Handles the change in the phone number input.
+   - `handleImageChange`: Handles the selection of files.
+   - `handleSubmit`: Creates a `FormData` object to send the phone number and images as a `multipart/form-data` request to the API.
+
+---
+
+## Uploading Images
+
+The `handleSubmit` function in the `UploadForm.js` handles sending the images to the backend API using **Axios**.
+
+- We use **FormData** to package the phone number and images as a multipart form.
+- When the form is submitted, a `POST` request is sent to the Django API (`/api/upload/`).
+- The images are uploaded and, if successful, the image URLs are returned and displayed.
+
+---
+
+## Fetching Image URLs
+
+Create another component to retrieve and display image URLs for a given phone number.
+
+1. **Create `ImageList.js`** in `src/components/`:
+
+   ```jsx
+   import React, { useState } from 'react';
+   import axios from 'axios';
+
+   const ImageList = () => {
+     const [phoneNumber, setPhoneNumber] = useState('');
+     const [imageUrls, setImageUrls] = useState([]);
+     const [loading, setLoading] = useState(false);
+     const [error, setError] = useState('');
+
+     const handlePhoneNumberChange = (e) => {
+       setPhoneNumber(e.target.value);
+     };
+
+     const fetchImages = async () => {
+       setLoading(true);
+       setError('');
+       try {
+         const response = await axios.get(`${process.env.REACT_APP_API_URL}/get-phone/`, {
+           params: { phone_number: phoneNumber },
+         });
+
+         setImageUrls(response.data.image_urls);
+       } catch (error) {
+         setError('Failed to retrieve images.');
+       } finally {
+         setLoading(false);
+       }
+     };
+
+     return (
+       <div>
+         <h2>View Uploaded Images</h2>
+         <input
+           type="text"
+           placeholder="Enter phone number"
+           value={phoneNumber}
+           onChange={handlePhoneNumberChange}
+         />
+         <button onClick={fetchImages} disabled={loading}>
+           {loading ? 'Loading...' : 'Fetch Images'}
+         </button>
+
+         {error && <p style={{ color: 'red' }}>{error}</p>}
+
+         {imageUrls.length > 0 && (
+           <div>
+             <h3>Images:</h3>
+             <ul>
+               {Object.keys(imageUrls).map((filename) => (
+                 <li key={filename}>
+                   <strong>{filename}</strong>: 
+                   <a href={imageUrls[filename]} target="_blank" rel="noopener noreferrer">
+                     View Image
+                   </a>
+                 </li>
+               ))}
+             </ul>
+           </div>
+         )}
+       </div>
+     );
+   };
+
+   export default ImageList;
+   ```
+
+### Explanation:
+- `fetchImages`: Sends a GET request to `/api/get-phone/` to fetch image URLs for a given phone number.
+- The URLs are displayed with a "View Image" link for each file.
+
+---
+
+## Handling API Responses
+
+Both the upload and image-fetching requests will return different responses:
+
+### Upload:
+- On success, the response contains the `filename`, `message`, and `image_url` for each uploaded file.
+- On error, an appropriate error message will be shown.
+
+### Fetching Images:
+- On success, the image URLs are displayed as links to the images.
+- On error, an error message is shown indicating that the images couldn't be retrieved.
+
+---
+
+## Error Handling
+
+To handle errors gracefully, ensure that your frontend displays appropriate messages in case of failure. For instance, you can show error messages for invalid inputs or failed requests:
+
+```jsx
+try {
+  const response = await axios.post(url, data);
+} catch (error) {
+  setError("There was an error with your request.");
+}
+```
+
+---
+
+## Styling the UI
+
+You can style the components using plain CSS or frameworks like **Material-UI** or **Bootstrap**. Here's an example of some basic styles you can apply to the form:
+
+```css
+form {
+  max-width: 500px;
+  margin: auto;
+}
+
+input[type="text"], input[type="file"] {
+  width: 100%;
+  padding: 8px;
+  margin: 10px 0;
+}
+
+button {
+  padding: 10px 15px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+```
+
+---
+
+## Conclusion
+
+You now have a React frontend that integrates with the Django API for uploading images and fetching URLs. You can
